@@ -1,0 +1,42 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Generated artifacts and local tooling
+/release/
+dist-electron/
+test-results/
+playwright-report/
+coverage/
+*.tsbuildinfo
+.venv/
+__pycache__/
+
+# Source backups and local UI review captures
+*.before-*
+*.backup
+/lottolab-*.png
+
+# Internal audit
+/AUDITORIA-LIMPEZA.md
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

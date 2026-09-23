@@ -1,0 +1,52 @@
+// @see - https://www.electron.build/configuration/configuration
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.lottolab.desktop",
+  "asar": true,
+  "productName": "LottoLab",
+  "directories": {
+    "output": "release/${version}"
+  },
+  "files": [
+    "dist",
+    "dist-electron"
+  ],
+  "extraResources": [
+    {
+      "from": "LottoLab-icon.ico",
+      "to": "LottoLab-icon.ico"
+    }
+  ],
+  "mac": {
+    "target": [
+      "dmg"
+    ],
+    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+  },
+  "win": {
+    "icon": "LottoLab-icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "${productName}-${version}-${arch}-setup.${ext}"
+  },
+  "nsis": {
+    "installerIcon": "LottoLab-icon.ico",
+    "uninstallerIcon": "LottoLab-icon.ico",
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "deleteAppDataOnUninstall": false
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "artifactName": "${productName}-Linux-${version}.${ext}"
+  }
+}

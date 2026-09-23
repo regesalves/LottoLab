@@ -1,0 +1,32 @@
+export {
+  countHits,
+  createEvaluationCache,
+  evaluateGames,
+  evaluateGameAgainstContest,
+  calculateLottoLabScore,
+  evaluateGameHistory,
+  rankGames,
+  calcularEstatisticas,
+  createHitCounter,
+  ehPar,
+  ehMoldura,
+  ehPrimo,
+  ehFibonacci,
+  ehMultiploDe3,
+} from "../../engine/statistics";
+
+export type {
+  HistoricalEvaluation,
+  EvaluatedGame,
+  RankingCriterion,
+  EvaluationCache,
+  EstatisticasLotofacil,
+  ContestEvaluation,
+  HistoricalContest,
+  NumberCollection,
+  WindowEvaluation,
+  LottoLabScore,
+  HitThreshold,
+  RecencyEvaluation,
+  ConsistencyEvaluation,
+} from "../../engine/statistics";

@@ -254,6 +254,7 @@ function App() {
     return (
         <div className={"app modality-" + modalidade}>
             <section className="hero-landing" aria-label="LottoLab banner">
+                <div className="hero-inner">
                 <div className="hero-brand-wrap">
                     <div className="brand-copy">
                         <h1 className="brand"><span>Lotto</span><span>Lab</span></h1>
@@ -264,14 +265,15 @@ function App() {
                     </div>
                 </div>
 
-                <div className="hero-visual" aria-hidden="true">
-                    <img src={heroBalls} alt="" />
-                </div>
-
                 <div className="hero-slogan" aria-hidden="true">
                     Mais<br />
                     que números,<br />
                     estratégia!
+                </div>
+                </div>
+
+                <div className="hero-visual" aria-hidden="true">
+                    <img src={heroBalls} alt="" />
                 </div>
             </section>
 

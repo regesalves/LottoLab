@@ -3204,7 +3204,7 @@ h3,
 /* Compact every desktop filter block instead of stretching its controls. */
 @media (min-width: 1200px) {
   .filters-card {
-    width: 868px !important;
+    width: 100% !important;
     max-width: 100% !important;
   }
 
@@ -3394,4 +3394,53 @@ h3,
   color: var(--color-text-secondary, #6f6880);
   font-size: 10px;
   line-height: 1.35;
+}
+
+/* Keep desktop content compact and balance short game lists. */
+@media (min-width: 901px) {
+  .content { max-width: 1320px; }
+
+  .games-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
+    justify-content: start;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .games-list > .game-row {
+    margin-bottom: 0;
+  }
+}
+
+@media (min-width: 1201px) {
+  .games-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.hero-inner {
+  display: contents;
+}
+
+@media (min-width: 901px) {
+  .hero-landing {
+    padding: 0;
+  }
+
+  .hero-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 1320px;
+    min-height: inherit;
+    margin-inline: auto;
+    padding: 30px 52px 24px;
+  }
+
+  .hero-slogan {
+    left: 24px;
+  }
 }

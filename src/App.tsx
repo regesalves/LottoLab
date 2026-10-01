@@ -231,6 +231,8 @@ function App() {
             if (resumo.erroAtualizacao) {
                 mensagem = `Não foi possível atualizar: ${resumo.erroAtualizacao}`;
             } else if (resumo.concursosAdicionados > 0 && resumo.concursoAtual) {
+                setConcursoReferencia(resumo.concursoAtual.concurso);
+                referenciasSalvas.current[modalidade] = resumo.concursoAtual.concurso;
                 const quantidade = resumo.concursosAdicionados;
                 mensagem = `${quantidade} concurso${quantidade === 1 ? "" : "s"} novo${quantidade === 1 ? "" : "s"} adicionado${quantidade === 1 ? "" : "s"}. Histórico atualizado até o concurso ${resumo.concursoAtual.concurso} em ${dataHora}.`;
             } else if (resumo.concursoAtual) {

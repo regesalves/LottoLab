@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { unlink, writeFile } from 'node:fs/promises'
 import {
-  carregarEAtualizarHistorico,
   getContestByNumber,
   loadHistorySnapshot,
   refreshHistorySnapshot,
@@ -30,12 +29,8 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
-let carregamentoHistorico: ReturnType<typeof carregarEAtualizarHistorico> | null = null
-
-ipcMain.handle('lotofacil:carregar-historico', () => {
-  carregamentoHistorico ??= carregarEAtualizarHistorico()
-  return carregamentoHistorico
-})
+// Alias legado também carrega somente a base local.
+ipcMain.handle('lotofacil:carregar-historico', () => loadHistorySnapshot())
 
 ipcMain.handle('lotofacil:load-snapshot', () => loadHistorySnapshot())
 ipcMain.handle('lotofacil:refresh-history', () => refreshHistorySnapshot())

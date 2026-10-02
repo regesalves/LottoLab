@@ -1,15 +1,29 @@
 import { app } from "electron";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import historicoInicial from "../src/data/lotofacil-history.json";
 import type {
   ConcursoLotofacil,
   HistorySnapshot,
   LocalStore,
-  ResumoHistoricoLotofacil,
 } from "../src/history/types";
 
-const API_CAIXA = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil";
+// Mesmo servidor publicado pelo portal oficial; redescoberto se a rota falhar.
+let apiCaixa = "https://servicebus3.caixa.gov.br/portaldeloterias";
+const PARAMETROS_CAIXA = "https://loterias.caixa.gov.br/Style%20Library/json/params.txt";
+
+async function descobrirApiCaixa(): Promise<string> {
+  const resposta = await fetch(PARAMETROS_CAIXA, { signal: AbortSignal.timeout(3000) });
+  if (!resposta.ok) throw new Error(`Portal CAIXA respondeu ${resposta.status}`);
+  const dados = await resposta.json() as { urlapiloterias?: string };
+  const url = new URL(dados.urlapiloterias ?? "");
+  if (url.protocol !== "https:" || !/^servicebus\d+\.caixa\.gov\.br$/.test(url.hostname)
+      || url.pathname.replace(/\/$/, "") !== "/portaldeloterias"
+      || url.port || url.username || url.password || url.search || url.hash) {
+    throw new Error("Endereço de API inválido no portal da CAIXA.");
+  }
+  return url.origin + "/portaldeloterias";
+}
 const ARQUIVO_HISTORICO = "lotofacil-history.json";
 
 const localStore: LocalStore = {
@@ -23,7 +37,9 @@ const localStore: LocalStore = {
   },
   async writeJson<T>(key: string, value: T): Promise<void> {
     const caminho = path.join(app.getPath("userData"), key);
-    await writeFile(caminho, JSON.stringify(value), "utf8");
+    const temporario = `${caminho}.tmp`;
+    await writeFile(temporario, JSON.stringify(value), "utf8");
+    await rename(temporario, caminho);
   },
 };
 
@@ -55,33 +71,32 @@ function normalizarHistorico(valores: unknown): ConcursoLotofacil[] {
   return [...porConcurso.values()].sort((a, b) => a.concurso - b.concurso);
 }
 
-async function consultarCaixa(numero?: number): Promise<ConcursoLotofacil> {
-  const url = numero ? `${API_CAIXA}/${numero}` : API_CAIXA;
-  let ultimaFalha: unknown;
-
-  for (let tentativa = 0; tentativa < 4; tentativa += 1) {
+async function consultarCaixa(numero: number, api: string): Promise<ConcursoLotofacil | null> {
+  const resposta = await fetch(`${api}/api/lotofacil/${numero}`, {
+    signal: AbortSignal.timeout(3000),
+    headers: { Accept: "application/json" },
+  });
+  // O gateway oficial também encapsula o 404 do concurso futuro em HTTP 500.
+  if (resposta.status === 404 || resposta.status === 204) return null;
+  if (resposta.status === 500) {
+    const erro = await resposta.json().catch(() => null) as { exceptionMessage?: string } | null;
     try {
-      const resposta = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (resposta.status === 429) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (tentativa + 1)));
-        continue;
-      }
-      if (!resposta.ok) throw new Error(`CAIXA respondeu ${resposta.status}`);
-      const dados = await resposta.json() as RespostaCaixa;
-      const concurso = normalizarConcurso({
-        concurso: dados.numero,
-        data: dados.dataApuracao,
-        dezenas: dados.listaDezenas.map(Number),
-      });
-      if (!concurso) throw new Error("Resposta inválida da CAIXA");
-      return concurso;
-    } catch (erro) {
-      ultimaFalha = erro;
-      if (tentativa < 3) await new Promise((resolve) => setTimeout(resolve, 500 * (tentativa + 1)));
-    }
+      if (typeof erro?.exceptionMessage === "string"
+          && JSON.parse(erro.exceptionMessage).StatusCode === 404) return null;
+    } catch { /* Outros erros 500 continuam sendo falhas, nunca "atualizado". */ }
   }
-
-  throw ultimaFalha instanceof Error ? ultimaFalha : new Error("Falha ao consultar a CAIXA");
+  if (!resposta.ok) throw new Error(`CAIXA respondeu HTTP ${resposta.status}`);
+  const dados = await resposta.json() as RespostaCaixa;
+  if (dados === null) return null;
+  const concurso = normalizarConcurso({
+    concurso: dados.numero,
+    data: dados.dataApuracao,
+    dezenas: dados.listaDezenas,
+  });
+  if (!concurso || concurso.concurso !== numero) {
+    throw new Error("A CAIXA retornou um concurso incompleto ou inesperado.");
+  }
+  return concurso;
 }
 
 async function carregarArquivoLocal(caminho: string) {
@@ -117,48 +132,53 @@ export async function loadHistorySnapshot(): Promise<HistorySnapshot> {
   return resumir(historico, false);
 }
 
-export async function carregarEAtualizarHistorico(): Promise<ResumoHistoricoLotofacil> {
-  return refreshHistorySnapshot();
-}
-
 export async function getContestByNumber(numero: number): Promise<ConcursoLotofacil | null> {
   const snapshot = await loadHistorySnapshot();
   return snapshot.concursos.find((concurso) => concurso.concurso === numero) ?? null;
 }
 
-export async function refreshHistorySnapshot(): Promise<HistorySnapshot> {
+let atualizacaoEmCurso: Promise<HistorySnapshot> | null = null;
+
+export function refreshHistorySnapshot(): Promise<HistorySnapshot> {
+  // Compartilha a mesma busca entre inicializacao, StrictMode e botao manual.
+  atualizacaoEmCurso ??= atualizarHistorico().finally(() => {
+    atualizacaoEmCurso = null;
+  });
+  return atualizacaoEmCurso;
+}
+
+async function atualizarHistorico(): Promise<HistorySnapshot> {
   const snapshot = await loadHistorySnapshot();
-  const existentes = new Map(snapshot.concursos.map((concurso) => [concurso.concurso, concurso]));
-  const ultimoConhecido = snapshot.concursoAtual?.concurso ?? 0;
-
+  let historico = snapshot.concursos;
+  let adicionados = 0;
+  let redescobriuApi = false;
   try {
-    const maisRecente = await consultarCaixa();
-    if (maisRecente.concurso <= ultimoConhecido) return resumir(snapshot.concursos, false);
-
-    const novosConcursos: ConcursoLotofacil[] = [];
-    for (let numero = ultimoConhecido + 1; numero <= maisRecente.concurso; numero += 1) {
-      const concurso = numero === maisRecente.concurso ? maisRecente : await consultarCaixa(numero);
-      if (concurso.concurso !== numero) {
-        throw new Error("A CAIXA retornou um concurso incompleto ou inesperado.");
+    for (let numero = (snapshot.concursoAtual?.concurso ?? 0) + 1; ; numero += 1) {
+      let concurso: ConcursoLotofacil | null;
+      try {
+        concurso = await consultarCaixa(numero, apiCaixa);
+      } catch (erro) {
+        // Uma unica descoberta por sincronizacao, sem repetir a rota que falhou.
+        if (redescobriuApi) throw erro;
+        redescobriuApi = true;
+        const descoberta = await descobrirApiCaixa().catch(() => null);
+        if (!descoberta || descoberta === apiCaixa) throw erro;
+        apiCaixa = descoberta;
+        concurso = await consultarCaixa(numero, apiCaixa);
       }
-      if (!existentes.has(concurso.concurso)) {
-        existentes.set(concurso.concurso, concurso);
-        novosConcursos.push(concurso);
-      }
+      if (!concurso) break;
+      const atualizado = normalizarHistorico([...historico, concurso]);
+      // Persiste cada avanco: uma falha posterior nao perde concursos obtidos.
+      await localStore.writeJson(ARQUIVO_HISTORICO, atualizado);
+      historico = atualizado;
+      adicionados += 1;
     }
-
-    const historicoAtualizado = normalizarHistorico([...snapshot.concursos, ...novosConcursos]);
-    if (historicoAtualizado.length !== snapshot.concursos.length + novosConcursos.length) {
-      throw new Error("A CAIXA retornou concursos inválidos.");
-    }
-
-    if (novosConcursos.length > 0) {
-      await localStore.writeJson(ARQUIVO_HISTORICO, historicoAtualizado);
-    }
-    return resumir(historicoAtualizado, novosConcursos.length > 0, novosConcursos.length);
+    return resumir(historico, adicionados > 0, adicionados);
   } catch (erro) {
     console.warn("Não foi possível atualizar o histórico da Lotofácil; mantendo a base local.", erro);
-    const mensagem = erro instanceof Error ? erro.message : "Falha ao consultar a CAIXA.";
-    return resumir(snapshot.concursos, false, 0, mensagem);
+    const mensagem = erro instanceof Error && erro.name === "TimeoutError"
+      ? "A CAIXA demorou para responder. O histórico local foi mantido."
+      : erro instanceof Error ? erro.message : "Falha ao consultar a CAIXA.";
+    return resumir(historico, adicionados > 0, adicionados, mensagem);
   }
 }

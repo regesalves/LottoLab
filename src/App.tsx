@@ -6,6 +6,7 @@ import historicoCompleto from "./data/lotofacil-history.json";
 import type { ConcursoLotofacil, ResumoHistoricoLotofacil } from "./history/types";
 import {
     createLotofacilHistoryProvider,
+    iniciarHistorico,
     type LotofacilHistoryProvider,
 } from "./history/lotofacilHistoryProvider";
 import {
@@ -147,16 +148,23 @@ function App() {
 
     useEffect(() => {
         let ativo = true;
+        const cancelamento = new AbortController();
 
-        void historicoProvider.current.carregar().then((resumo) => {
-            if (ativo) setHistorico(resumo);
-        }).catch(() => {
-            if (!ativo) return;
-            setHistorico(null);
+        void iniciarHistorico(historicoProvider.current, (resumo) => {
+            setHistorico(resumo);
+            if (resumo.concursoAtual) {
+                const ultimo = resumo.concursoAtual.concurso;
+                setConcursoReferencia((atual) => resumo.concursosAdicionados > 0 ? ultimo : atual ?? ultimo);
+                if (resumo.concursosAdicionados > 0) referenciasSalvas.current[modalidade] = ultimo;
+            }
+        }, () => ativo, cancelamento.signal).catch(() => {
+            // A base embutida continua utilizável mesmo se a leitura via IPC falhar.
+            if (ativo) setConcursoReferencia(EMBEDDED_DATA.at(-1)?.concurso ?? null);
         });
 
         return () => {
             ativo = false;
+            cancelamento.abort();
         };
     }, [modalidade]);
     useEffect(() => () => {
@@ -222,6 +230,10 @@ function App() {
         try {
             const resumo = await historicoProvider.current.refresh();
             setHistorico(resumo);
+            if (resumo.concursosAdicionados > 0 && resumo.concursoAtual) {
+                setConcursoReferencia(resumo.concursoAtual.concurso);
+                referenciasSalvas.current[modalidade] = resumo.concursoAtual.concurso;
+            }
             const dataHora = new Intl.DateTimeFormat("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
@@ -231,8 +243,6 @@ function App() {
             if (resumo.erroAtualizacao) {
                 mensagem = `Não foi possível atualizar: ${resumo.erroAtualizacao}`;
             } else if (resumo.concursosAdicionados > 0 && resumo.concursoAtual) {
-                setConcursoReferencia(resumo.concursoAtual.concurso);
-                referenciasSalvas.current[modalidade] = resumo.concursoAtual.concurso;
                 const quantidade = resumo.concursosAdicionados;
                 mensagem = `${quantidade} concurso${quantidade === 1 ? "" : "s"} novo${quantidade === 1 ? "" : "s"} adicionado${quantidade === 1 ? "" : "s"}. Histórico atualizado até o concurso ${resumo.concursoAtual.concurso} em ${dataHora}.`;
             } else if (resumo.concursoAtual) {
